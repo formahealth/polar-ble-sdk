@@ -34,26 +34,11 @@ public struct PmdSetting {
         }
     }
     
+    // MARK: Modification
+    ///      This function caused crashes. Instead of fetching settings for each stream/recording type before starting it, we use predefined settings.
+    ///      https://github.com/polarofficial/polar-ble-sdk/issues/509
     static func parsePmdSettingsData(_ data: Data) throws -> [PmdSettingType : Set<UInt32>] {
-        var offset = 0
-        var settings = [PmdSettingType : Set<UInt32>]()
-        while (offset+2) < data.count {
-            let type = PmdSettingType(rawValue: data[offset]) ?? .unknown
-            offset += 1
-            let count = Int(data[offset])
-            offset += 1
-            let advanceStep = mapTypeToFieldSize[type] ?? data.count
-            settings[type] = try Set(stride(from: offset, to: offset + (count*advanceStep), by: advanceStep).map { (start) -> UInt32 in
-                if (start.advanced(by: advanceStep) <= data.count ) {
-                    let value = data.subdata(in: start..<start.advanced(by: advanceStep))
-                    offset += advanceStep
-                    return BlePmdClient.arrayToUInt(value, offset: 0, size: advanceStep)
-                } else {
-                    throw BlePmdError.invalidPMDData(description: "Broken PMD settings data.")
-                }
-            })
-        }
-        return settings
+        return [:]
     }
     
     mutating func updatePmdSettingsFromStartResponse(_ data: Data) throws {
