@@ -360,6 +360,14 @@ class CBDeviceSessionImpl: BleDeviceSession, CBPeripheralDelegate, BleAttributeT
     func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         BleLogger.trace_if_error("didUpdateNotificationStateForCharacteristic \(characteristic.uuid.uuidString): ", error: error)
         let errorCode = (error as NSError?)?.code ?? 0
+        
+        // MARK: Modification
+        ///      This state occurs when the SDK factory reset fails. In this state, the iPhone cannot re-connect to Polar unless the user resets it using the pin button.
+        ///      The `EncryptionInsufficient` notification is used to communicate to the user that they will need reset the Polar; and then "Forget Device" from bluetooth settings before re-establishing connection.
+        if errorCode == CBError.Code.encryptionTimedOut.rawValue {
+            NotificationCenter.default.post(name: .init("EncryptionInsufficient"), object: nil)
+        }
+        
         if errorCode == CBError.Code.uuidNotAllowed.rawValue {
             BleLogger.trace("Special handling needed for security re-establish")
             attNotifyQueue.removeAll()
