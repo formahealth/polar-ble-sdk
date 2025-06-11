@@ -271,11 +271,14 @@ public class CBDeviceListenerImpl: NSObject, SDKCBCentralManagerDelegate {
         })
     }
     
+    // MARK: Modification
+    ///      The `handleDisconnected` function is modified to handle disconnections because the Polar was reset using the pin button.
+    ///      In this state, the iPhone cannot re-connect to Polar.
+    ///      The `PairingInfoRemoved` notification is used to communicate to the user that they will need to "Forget Device" from bluetooth settings before re-establishing connection.
     fileprivate func handleDisconnected(_ session: CBDeviceSessionImpl, error: Error?) {
-        
         let canTryReconnect = !(error?.indicatesBLEPairingProblem ?? false)
         
-        if automaticReconnection && canTryReconnect {
+        if automaticReconnection, canTryReconnect {
             switch (session.state) {
             case .sessionOpen where session.connectionType == .directConnection && self.blePowered():
                 updateSessionState(session, state: .sessionOpening)
@@ -290,6 +293,13 @@ public class CBDeviceListenerImpl: NSObject, SDKCBCentralManagerDelegate {
             }
         } else {
             updateSessionState(session, state: .sessionClosed, error: error)
+        }
+        // MARK: Modification
+        ///      Set flag in handleDisbased on `CBError.Code`
+        if !canTryReconnect,
+           let errorCode = (error as NSError?)?.code,
+           errorCode == CBError.Code.peerRemovedPairingInformation.rawValue {
+            NotificationCenter.default.post(name: .init("PairingInfoRemoved"), object: nil)
         }
     }
     
