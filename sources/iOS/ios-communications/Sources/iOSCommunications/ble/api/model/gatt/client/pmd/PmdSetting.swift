@@ -34,7 +34,12 @@ public struct PmdSetting {
         }
     }
     
+    // MARK: Modification
+    ///      This function caused crashes. Instead of fetching settings for each stream/recording type before starting it, we use predefined settings.
+    ///      https://github.com/polarofficial/polar-ble-sdk/issues/509
     static func parsePmdSettingsData(_ data: Data) -> [PmdSettingType : Set<UInt32>] {
+        return [:]
+        
         var offset = 0
         var settings = [PmdSettingType : Set<UInt32>]()
         while (offset+2) < data.count {
