@@ -420,6 +420,11 @@ class CBDeviceSessionImpl: BleDeviceSession, CBPeripheralDelegate, BleAttributeT
         if let error = error as? NSError, error.domain == CBATTError.errorDomain {
             let cbAttError = CBATTError(_nsError: error)
             if cbAttError.code == .insufficientEncryption { // pairing removed from iOS
+                // MARK: Modification
+                ///      This state occurs when the SDK factory reset fails. In this state, the iPhone cannot re-connect to Polar unless the user resets it using the pin button.
+                ///      The `EncryptionInsufficient` notification is used to communicate to the user that they will need reset the Polar; and then "Forget Device" from bluetooth settings before re-establishing connection.
+                NotificationCenter.default.post(name: .init("EncryptionInsufficient"), object: nil)
+                
                 BleLogger.trace("Special handling needed for security re-establish")
                 attNotifyQueue.removeAll()
                 serviceCount.set(0)
