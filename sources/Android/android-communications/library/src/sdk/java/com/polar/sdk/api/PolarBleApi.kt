@@ -143,7 +143,7 @@ abstract class PolarBleApi(val features: Set<PolarBleSdkFeature>) : PolarOnlineS
      * The activity recording data types available in Polar devices.
      */
     enum class PolarActivityDataType {
-        SLEEP, STEPS, DISTANCE, CALORIES, HR_SAMPLES, NIGHTLY_RECHARGE, SKIN_TEMPERATURE, PPI_SAMPLES, ACTIVE_TIME, ACTIVITY_SAMPLES
+        SLEEP, STEPS, DISTANCE, CALORIES, HR_SAMPLES, NIGHTLY_RECHARGE, SKIN_TEMPERATURE, PPI_SAMPLES, ACTIVE_TIME, ACTIVITY_SAMPLES, DAILY_SUMMARY
     }
 
     /**
@@ -495,6 +495,15 @@ abstract class PolarBleApi(val features: Set<PolarBleSdkFeature>) : PolarOnlineS
      * @return [Flowable] success with the paths of the deleted data or error
      */
     abstract fun deleteStoredDeviceData(identifier: String, dataType: PolarStoredDataType, until: LocalDate?): Completable
+
+    /**
+     * Enable or disable telemetry (trace logging / diagnostics) on the device.
+     *
+     * @param identifier Polar device ID or BT address
+     * @param enabled true = telemetry on, false = off
+     * @return Completable (success or error)
+     */
+    abstract fun setTelemetryEnabled(deviceId: String, enabled: Boolean): Completable
 
     /**
      * Deletes device day (YYYMMDD) folders from the given date range from a device.
