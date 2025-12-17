@@ -9,7 +9,6 @@ import com.polar.androidcommunications.api.ble.model.gatt.client.PowerSourcesSta
 import com.polar.androidcommunications.api.ble.model.gatt.client.BatteryPresentState
 import com.polar.androidcommunications.api.ble.model.gatt.client.PowerSourceState
 import com.polar.androidcommunications.api.ble.model.gatt.client.pmd.PmdMeasurementType
-import com.polar.androidcommunications.api.ble.model.polar.BlePolarDeviceCapabilitiesUtility.FileSystemType
 import com.polar.polarsensordatacollector.DataCollector
 import com.polar.polarsensordatacollector.crypto.SecretKeyManager
 import com.polar.sdk.api.PolarBleApi
@@ -39,7 +38,6 @@ import com.polar.sdk.api.model.sleep.PolarNightlyRechargeData
 import com.polar.sdk.api.model.PolarSkinTemperatureData
 import com.polar.sdk.api.model.activity.Polar247PPiSamplesData
 import com.polar.sdk.api.model.activity.PolarActiveTimeData
-import com.polar.sdk.api.model.trainingsession.PolarTrainingSession
 import com.polar.sdk.api.model.trainingsession.PolarTrainingSessionReference
 import com.polar.sdk.api.model.activity.PolarActivitySamplesDayData
 import com.polar.sdk.api.model.activity.PolarDailySummaryData
@@ -1063,6 +1061,37 @@ class PolarDeviceRepository @Inject constructor(
         }
     }
 
+    suspend fun deleteTelemetryData(
+        deviceId: String,
+    ): ResultOfRequest<Nothing> = withContext(Dispatchers.IO) {
+        try {
+            api.deleteTelemetryData(deviceId)
+                .subscribeOn(Schedulers.io())
+                .await()
+            ResultOfRequest.Success()
+        } catch (e: Exception) {
+            ResultOfRequest.Failure("Failed to delete telemetry data files from device", e)
+        }
+    }
+
+    @OptIn(ExperimentalTime::class)
+    suspend fun deleteTrainingSession(deviceId: String, path: String): ResultOfRequest<Nothing> = withContext(Dispatchers.IO) {
+        val trainingSessionReferenceEntry = trainingSessionReferenceCache[deviceId]?.find { it.path == path }
+        trainingSessionReferenceEntry?.let { trainingSessionEntry ->
+            return@withContext try {
+                val result = measureTimedValue {
+                    api.deleteTrainingSession(deviceId, trainingSessionEntry).await()
+                }
+                Log.d(TAG, "delete of training session $path took ${TimeUnit.MICROSECONDS.toSeconds(result.duration.inWholeMicroseconds)} seconds")
+                trainingSessionReferenceCache[deviceId]?.remove(trainingSessionEntry)
+                ResultOfRequest.Success()
+            } catch (e: Exception) {
+                ResultOfRequest.Failure("Failed to remove training session $path", e)
+            }
+        }
+        ResultOfRequest.Failure("Tried to remove \"$path\", but no matching entry in repository", null)
+    }
+
     suspend fun getSkinTemperatureData(
         deviceId: String,
         from: LocalDate,
@@ -1076,9 +1105,9 @@ class PolarDeviceRepository @Inject constructor(
         }
     }
 
-    fun getTrainingSessionReferences(deviceId: String): Flow<PolarTrainingSessionReference> {
+    fun getTrainingSessionReferences(deviceId: String, fromDate: Date, toDate: Date): Flow<PolarTrainingSessionReference> {
         Log.d(TAG, "getTrainingSessionReferences from device $deviceId")
-        return api.getTrainingSessionReferences(deviceId)
+        return api.getTrainingSessionReferences(deviceId, fromDate, toDate)
             .doOnSubscribe {
                 trainingSessionReferenceCache[deviceId] = mutableListOf()
             }
@@ -1087,23 +1116,6 @@ class PolarDeviceRepository @Inject constructor(
                 it
             }
             .asFlow()
-    }
-
-    suspend fun getTrainingSession(deviceId: String, path: String): ResultOfRequest<PolarTrainingSession> {
-        Log.d(TAG, "getTrainingSession from device $deviceId in $path")
-
-        val trainingSessionReference = trainingSessionReferenceCache[deviceId]?.find { it.path == path }
-
-        trainingSessionReference?.let { offlineEntry ->
-            return try {
-                    return ResultOfRequest.Success(api.getTrainingSession(deviceId, offlineEntry).await())
-            } catch (e: Exception) {
-                Log.e(TAG, "getTrainingSession failed on path $path error $e")
-                ResultOfRequest.Failure("getTrainingSession failed on path $path", e)
-            }
-        }
-
-        return ResultOfRequest.Failure("getTrainingSession failed on path $path", null)
     }
 
     fun getTrainingSessionWithProgress(
@@ -1222,6 +1234,11 @@ class PolarDeviceRepository @Inject constructor(
             api.setUsbConnectionMode(deviceId, enabled).await()
         }
 
+    suspend fun setDaylightSavingTime(deviceId: String) =
+        withContext(Dispatchers.IO) {
+            api.setDaylightSavingTime(deviceId).await()
+        }
+
     suspend fun setAutomaticTrainingDetectionSettings(
         deviceId: String,
         atdEnabled: Boolean,
@@ -1234,5 +1251,22 @@ class PolarDeviceRepository @Inject constructor(
             automaticTrainingDetectionSensitivity = sensitivity,
             minimumTrainingDurationSeconds = minDuration
         ).await()
+    }
+
+    fun listenHrBroadcasts(excludeDeviceIds: Set<String>?): Flowable<PolarHrBroadcastData> {
+        return api.startListenForPolarHrBroadcasts(null)
+            .filter { hrData ->
+                excludeDeviceIds?.contains(hrData.polarDeviceInfo.deviceId) == false
+            }
+            .doOnNext { hrData ->
+                Log.d(TAG, "HR Broadcast received: Device: ${hrData.polarDeviceInfo.deviceId}, " +
+                        "HR: ${hrData.hr}")
+            }
+            .doOnError { error ->
+                Log.e(TAG, "HR Broadcast error: ${error.message}", error)
+            }
+            .doOnComplete {
+                Log.d(TAG, "HR Broadcast stream completed")
+            }
     }
 }
